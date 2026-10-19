@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>WWI Red Triplane: Sopwith Hunter 1918</title>
+  
+  <!-- A-Frame 3D Engine -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <!-- Tailwind CSS for UI Overlay -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts for Vintage Military Theme -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Special+Elite&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      background-color: #000;
+    }
+
+    .font-cinzel { font-family: 'Cinzel', serif; }
+    .font-stencil { font-family: 'Special Elite', cursive; }
+
+    /* Custom Crosshair Gunsight */
+    #crosshair-hud {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    /* HUD Frame Overlay */
+    .hud-panel {
+      background: linear-gradient(135deg, rgba(20, 15, 10, 0.85) 0%, rgba(35, 25, 18, 0.9) 100%);
+      border: 2px solid #b8860b;
+      box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 4px 15px rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+    }
+
+    /* Gun Heat Bar styling */
+    .heat-bar-bg {
+      background: rgba(15, 15, 15, 0.9);
+      border: 1px solid #8b6508;
+    }
+    
+    .heat-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #22c55e 0%, #eab308 60%, #ef4444 100%);
+      transition: width 0.08s linear;
+    }
+
+    .heat-bar-overheat {
+      background: #ef4444 !important;
+      animation: flash-red 0.3s infinite alternate;
+    }
+
+    @keyframes flash-red {
+      from { opacity: 1; }
+      to { opacity: 0.3; }
+    }
+
+    /* Custom Glass Reticle glow */
+    .reticle-ring {
+      box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+    }
+
+    /* Vignette effect */
+    .vignette {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle, transparent 55%, rgba(10, 5, 0, 0.65) 100%);
+      z-index: 10;
+    }
+
+    /* Pulse animation for combo */
+    .combo-bounce {
+      animation: combo-pop 0.25s ease-out;
+    }
+    @keyframes combo-pop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.35); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Vignette overlay for cockpit feeling -->
+  <div class="vignette"></div>
+
+  <!-- Central Vintage Crosshair Reticle -->
+  <div id="crosshair-hud">
+    <svg width="100" height="100" viewBox="0 0 100 100" fill="none">
+      <!-- Outer Brass Ring -->
+      <circle cx="50" cy="50" r="38" stroke="#d4af37" stroke-width="1.5" stroke-dasharray="4 2" class="reticle-ring" opacity="0.85"/>
+      <!-- Inner Precision Circle -->
+      <circle cx="50" cy="50" r="16" stroke="#ef4444" stroke-width="1.5" opacity="0.9"/>
+      <circle cx="50" cy="50" r="2" fill="#ef4444"/>
+      <!-- Cross Hairlines -->
+      <line x1="50" y1="4" x2="50" y2="28" stroke="#d4af37" stroke-width="2"/>
+      <line x1="50" y1="72" x2="50" y2="96" stroke="#d4af37" stroke-width="2"/>
+      <line x1="4" y1="50" x2="28" y2="50" stroke="#d4af37" stroke-width="2"/>
+      <line x1="72" y1="50" x2="96" y2="50" stroke="#d4af37" stroke-width="2"/>
+      <!-- Lead distance notches -->
+      <circle cx="34" cy="50" r="1" fill="#d4af37"/>
+      <circle cx="66" cy="50" r="1" fill="#d4af37"/>
+      <circle cx="50" cy="34" r="1" fill="#d4af37"/>
+      <circle cx="50" cy="66" r="1" fill="#d4af37"/>
+    </svg>
+  </div>
+
+  <!-- HUD TOP BAR (Score, Multiplier, Kills, Timer) -->
+  <div id="game-hud" class="absolute top-4 left-0 right-0 z-20 px-4 md:px-8 flex justify-between items-start pointer-events-none hidden">
+    <!-- Left: Score & Combo -->
+    <div class="hud-panel p-3 rounded-lg text-amber-100 min-w-[160px]">
+      <div class="text-xs font-stencil uppercase text-amber-400 tracking-wider">Score</div>
+      <div id="hud-score" class="text-2xl md:text-3xl font-cinzel font-black text-yellow-400">000000</div>
+      <div class="flex items-center gap-2 mt-1">
+        <span class="text-xs font-semibold text-amber-300">COMBO:</span>
+        <span id="hud-combo" class="text-lg font-bold text-orange-400">x1</span>
+      </div>
+    </div>
+
+    <!-- Center: Match Timer -->
+    <div class="hud-panel px-6 py-2 rounded-lg text-center text-amber-100">
+      <div class="text-xs font-stencil uppercase text-amber-400 tracking-wider">Time Remaining</div>
+      <div id="hud-timer" class="text-3xl md:text-4xl font-cinzel font-black text-amber-200">01:00</div>
+    </div>
+
+    <!-- Right: Kills & Accuracy -->
+    <div class="hud-panel p-3 rounded-lg text-amber-100 text-right min-w-[160px]">
+      <div class="text-xs font-stencil uppercase text-amber-400 tracking-wider">Camels Downed</div>
+      <div id="hud-kills" class="text-2xl md:text-3xl font-cinzel font-black text-red-400">0</div>
+      <div class="text-xs text-amber-300/80 mt-1">Accuracy: <span id="hud-accuracy" class="font-bold text-amber-200">100%</span></div>
+    </div>
+  </div>
+
+  <!-- HUD BOTTOM: Spandau Gun Heat Bar -->
+  <div id="heat-hud" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-none hidden w-72 md:w-96">
+    <div class="hud-panel p-3 rounded-xl flex flex-col gap-1.5">
+      <div class="flex justify-between items-center text-xs font-stencil text-amber-300">
+        <span class="flex items-center gap-1.5">
+          <span class="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+          SPANDAU MG 08/15
+        </span>
+        <span id="heat-status" class="font-bold text-green-400">READY</span>
+      </div>
+      <div class="heat-bar-bg h-4 rounded-md overflow-hidden p-0.5">
+        <div id="heat-fill" class="heat-bar-fill rounded-sm"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE SHOOT BUTTON (Visible only on touch devices) -->
+  <button id="mobile-fire-btn" class="absolute bottom-8 right-8 z-30 w-20 h-20 bg-red-700/80 active:bg-red-600 border-2 border-amber-400 rounded-full flex items-center justify-center text-amber-100 font-cinzel font-black text-sm shadow-2xl active:scale-95 transition hidden">
+    FIRE!
+  </button>
+
+  <!-- START MENU OVERLAY -->
+  <div id="start-screen" class="absolute inset-0 z-40 bg-black/80 flex items-center justify-center p-4">
+    <div class="hud-panel max-w-xl w-full p-6 md:p-8 rounded-2xl text-amber-100 text-center border-2 border-amber-500 relative">
+      <div class="text-amber-500 font-stencil text-sm tracking-widest uppercase mb-1">WWI Dogfight Target Simulator</div>
+      <h1 class="text-3xl md:text-5xl font-cinzel font-black text-yellow-400 mb-2 drop-shadow-md">RED BARON 1918</h1>
+      <p class="text-xs md:text-sm text-amber-200/80 italic mb-6">Take the controls of the legendary Fokker Dr.I Triplane and clear the sky of British Sopwith Camels!</p>
+
+      <!-- Rules / Instructions -->
+      <div class="bg-black/50 p-4 rounded-xl text-left border border-amber-900/60 mb-6 space-y-2 text-xs md:text-sm">
+        <div class="flex items-start gap-2">
+          <span class="text-amber-400 font-bold">🎯 AIM:</span>
+          <span>Move <strong>Mouse</strong> or <strong>Touch Screen</strong> to aim crosshair sight.</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-amber-400 font-bold">🔥 FIRE:</span>
+          <span>Hold <strong>SPACEBAR</strong> or <strong>LEFT CLICK</strong> to fire dual Spandau guns.</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-amber-400 font-bold">✈️ MOVE:</span>
+          <span>Use <strong>WASD / Arrow Keys</strong> to pitch and roll your triplane posture.</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-amber-400 font-bold">⚠️ HEAT:</span>
+          <span>Do not overheat machine guns or they will jam temporarily!</span>
+        </div>
+      </div>
+
+      <button id="start-btn" class="w-full py-4 bg-gradient-to-r from-red-800 to-amber-700 hover:from-red-700 hover:to-amber-600 text-yellow-200 font-cinzel font-black text-xl rounded-xl border-2 border-yellow-400 shadow-lg transform active:scale-95 transition cursor-pointer">
+        COMMENCE DOGFIGHT
+      </button>
+    </div>
+  </div>
+
+  <!-- GAME OVER OVERLAY -->
+  <div id="gameover-screen" class="absolute inset-0 z-40 bg-black/85 flex items-center justify-center p-4 hidden">
+    <div class="hud-panel max-w-md w-full p-6 md:p-8 rounded-2xl text-amber-100 text-center border-2 border-red-600">
+      <div class="text-red-500 font-stencil text-xs tracking-widest uppercase mb-1">Mission Completed</div>
+      <h2 class="text-3xl md:text-4xl font-cinzel font-black text-yellow-400 mb-1">DEBRIEFING</h2>
+      <div id="rank-badge" class="inline-block px-4 py-1 bg-amber-500/20 border border-amber-400 rounded-full text-amber-300 font-stencil text-xs font-bold mb-6">
+        RANK: RED BARON ACE
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="grid grid-cols-2 gap-3 bg-black/60 p-4 rounded-xl border border-amber-900/50 mb-6 text-left text-xs md:text-sm">
+        <div>
+          <div class="text-amber-400/80 font-semibold">Final Score:</div>
+          <div id="final-score" class="text-xl font-cinzel font-black text-yellow-300">0</div>
+        </div>
+        <div>
+          <div class="text-amber-400/80 font-semibold">Camels Shot Down:</div>
+          <div id="final-kills" class="text-xl font-cinzel font-black text-red-400">0</div>
+        </div>
+        <div>
+          <div class="text-amber-400/80 font-semibold">Shots Fired:</div>
+          <div id="final-shots" class="text-amber-100 font-bold">0</div>
+        </div>
+        <div>
+          <div class="text-amber-400/80 font-semibold">Hit Accuracy:</div>
+          <div id="final-accuracy" class="text-amber-100 font-bold">0%</div>
+        </div>
+      </div>
+
+      <button id="restart-btn" class="w-full py-3.5 bg-gradient-to-r from-red-800 to-amber-700 hover:from-red-700 hover:to-amber-600 text-yellow-200 font-cinzel font-black text-lg rounded-xl border-2 border-yellow-400 shadow-lg transform active:scale-95 transition cursor-pointer">
+        RE-ENTER THE SKY
+      </button>
+    </div>
+  </div>
+
+
+  <!-- 3D A-FRAME SCENE -->
+  <a-scene embedded physics="debug: false" vr-mode-ui="enabled: false" loading-screen="enabled: false" fog="type: exponential; color: #dfc8a5; density: 0.002">
+    
+    <a-assets>
+      <!-- Canvas generated dynamic textures will be injected here -->
+      <img id="tex-ironcross" alt="Iron Cross">
+      <img id="tex-rafroundel" alt="RAF Roundel">
+      <img id="tex-terrain" alt="Battlefield Ground">
+      <img id="tex-wood" alt="Propeller Wood">
+    </a-assets>
+
+    <!-- Sky Environment -->
+    <a-sky color="#f5d09f"></a-sky>
+
+    <!-- Sun & Ambient Lighting -->
+    <a-entity light="type: ambient; color: #ffe6cc; intensity: 0.7"></a-entity>
+    <a-entity light="type: directional; color: #fffaed; intensity: 1.2; castShadow: false" position="40 80 20"></a-entity>
+
+    <!-- Ground / Battlefield WWI Countryside -->
+    <a-plane src="#tex-terrain" repeat="40 40" width="1200" height="1200" rotation="-90 0 0" position="0 -2 0" material="roughness: 0.9; metalness: 0.1"></a-plane>
+
+    <!-- Drifting Low-Poly Atmospheric Clouds -->
+    <a-entity id="cloud-group"></a-entity>
+
+    <!-- Active Target Sopwith Camels Container -->
+    <a-entity id="targets-container"></a-entity>
+
+    <!-- Particle Explosions & Tracers Container -->
+    <a-entity id="fx-container"></a-entity>
+
+    <!-- PLAYER RIG & COCKPIT -->
+    <a-entity id="player-rig" position="0 25 0">
+      <!-- Camera with Look Controls attached -->
+      <a-camera id="main-cam" look-controls="pointerLockEnabled: false" wasd-controls="enabled: false" position="0 0 0" raycaster="objects: .target-hitbox; far: 250">
+        
+        <!-- FOKKER Dr.I RED TRIPLANE COCKPIT (Attached directly to pilot view) -->
+        <a-entity id="cockpit" position="0 -0.38 -0.55">
+          
+          <!-- Crimson Engine Cowling -->
+          <a-cylinder color="#8b0000" radius="0.38" height="0.4" rotation="90 0 0" position="0 -0.05 -0.2"></a-cylinder>
+          <a-ring color="#222" radius-inner="0.1" radius-outer="0.38" rotation="0 0 0" position="0 -0.05 -0.401"></a-ring>
+
+          <!-- Spinning Wooden Propeller -->
+          <a-entity id="player-propeller" position="0 -0.05 -0.42">
+            <a-box src="#tex-wood" width="1.15" height="0.09" depth="0.02" rotation="0 0 0"></a-box>
+            <a-box src="#tex-wood" width="0.09" height="1.15" depth="0.02" rotation="0 0 0"></a-box>
+            <a-sphere color="#222" radius="0.07" position="0 0 0.01"></a-sphere>
+          </a-entity>
+
+          <!-- Dual Spandau Machine Guns (Left & Right) -->
+          <!-- Left Gun -->
+          <a-entity id="gun-left" position="-0.13 0.14 -0.15">
+            <a-cylinder color="#111" radius="0.025" height="0.45" rotation="90 0 0"></a-cylinder>
+            <a-cylinder color="#2a2a2a" radius="0.032" height="0.22" rotation="90 0 0" position="0 0 -0.05"></a-cylinder>
+            <a-box color="#333" width="0.07" height="0.07" depth="0.1" position="0 -0.02 0.18"></a-box>
+            <!-- Muzzle Flash Entity -->
+            <a-entity id="flash-left" position="0 0 -0.25" visible="false">
+              <a-cone color="#ffcc00" radius-bottom="0.07" radius-top="0.005" height="0.25" rotation="-90 0 0" material="emissive: #ffaa00; emissiveIntensity: 3; transparent: true; opacity: 0.95"></a-cone>
+              <a-light type="point" color="#ffaa00" intensity="3" distance="4"></a-light>
+            </a-entity>
+          </a-entity>
+
+          <!-- Right Gun -->
+          <a-entity id="gun-right" position="0.13 0.14 -0.15">
+            <a-cylinder color="#111" radius="0.025" height="0.45" rotation="90 0 0"></a-cylinder>
+            <a-cylinder color="#2a2a2a" radius="0.032" height="0.22" rotation="90 0 0" position="0 0 -0.05"></a-cylinder>
+            <a-box color="#333" width="0.07" height="0.07" depth="0.1" position="0 -0.02 0.18"></a-box>
+            <!-- Muzzle Flash Entity -->
+            <a-entity id="flash-right" position="0 0 -0.25" visible="false">
+              <a-cone color="#ffcc00" radius-bottom="0.07" radius-top="0.005" height="0.25" rotation="-90 0 0" material="emissive: #ffaa00; emissiveIntensity: 3; transparent: true; opacity: 0.95"></a-cone>
+              <a-light type="point" color="#ffaa00" intensity="3" distance="4"></a-light>
+            </a-entity>
+          </a-entity>
+
+          <!-- Fokker Dr.I Crimson Tri-Wings -->
+          <!-- Bottom Wing -->
+          <a-box color="#a31414" width="2.2" height="0.025" depth="0.38" position="0 -0.22 0.1"></a-box>
+          <!-- Middle Wing -->
+          <a-box color="#a31414" width="2.6" height="0.025" depth="0.38" position="0 0.05 0.1"></a-box>
+          <!-- Top Wing -->
+          <a-box color="#a31414" width="3.0" height="0.025" depth="0.38" position="0 0.42 0.0"></a-box>
+
+          <!-- Wing Struts -->
+          <a-cylinder color="#1a1a1a" radius="0.008" height="0.65" position="-1.1 0.1 0.05"></a-cylinder>
+          <a-cylinder color="#1a1a1a" radius="0.008" height="0.65" position="1.1 0.1 0.05"></a-cylinder>
+
+          <!-- Balkenkreuz Insignia Decals on Top Wingtips -->
+          <a-plane src="#tex-ironcross" width="0.28" height="0.28" position="-1.25 0.435 0" rotation="-90 0 0"></a-plane>
+          <a-plane src="#tex-ironcross" width="0.28" height="0.28" position="1.25 0.435 0" rotation="-90 0 0"></a-plane>
+
+          <!-- Padded Leather Cockpit Rim -->
+          <a-torus color="#3a1c0d" radius="0.26" radius-tubular="0.015" arc="180" rotation="90 0 0" position="0 -0.15 0.28"></a-torus>
+
+        </a-entity>
+      </a-camera>
+    </a-entity>
+
+  </a-scene>
+
+  <!-- GAME LOGIC SCRIPT -->
+  <script>
+    /* =========================================================================
+       1. PROCEDURAL CANVAS TEXTURE GENERATOR (ZERO EXTERNAL MEDIA DEPENDENCY)
+       ========================================================================= */
+    function generateTextures() {
+      // 1. German Iron Cross (Balkenkreuz)
+      const c1 = document.createElement('canvas'); c1.width = 256; c1.height = 256;
+      const ctx1 = c1.getContext('2d');
+      ctx1.fillStyle = '#a31414'; ctx1.fillRect(0,0,256,256);
+      ctx1.fillStyle = '#ffffff'; ctx1.fillRect(48, 108, 160, 40); ctx1.fillRect(108, 48, 40, 160);
+      ctx1.fillStyle = '#111111'; ctx1.fillRect(58, 118, 140, 20); ctx1.fillRect(118, 58, 20, 140);
+      document.getElementById('tex-ironcross').src = c1.toDataURL();
+
+      // 2. British RAF Roundel
+      const c2 = document.createElement('canvas'); c2.width = 256; c2.height = 256;
+      const ctx2 = c2.getContext('2d');
+      ctx2.fillStyle = '#4b5320'; ctx2.fillRect(0,0,256,256); // Olive ground
+      ctx2.beginPath(); ctx2.arc(128,128,110,0,Math.PI*2); ctx2.fillStyle = '#1e3a8a'; ctx2.fill(); // Blue
+      ctx2.beginPath(); ctx2.arc(128,128,70,0,Math.PI*2); ctx2.fillStyle = '#ffffff'; ctx2.fill(); // White
+      ctx2.beginPath(); ctx2.arc(128,128,30,0,Math.PI*2); ctx2.fillStyle = '#b91c1c'; ctx2.fill(); // Red
+      document.getElementById('tex-rafroundel').src = c2.toDataURL();
+
+      // 3. WWI Countryside Terrain Patchwork
+      const c3 = document.createElement('canvas'); c3.width = 512; c3.height = 512;
+      const ctx3 = c3.getContext('2d');
+      ctx3.fillStyle = '#4a5d31'; ctx3.fillRect(0,0,512,512);
+      for(let x=0; x<512; x+=64) {
+        for(let y=0; y<512; y+=64) {
+          ctx3.fillStyle = ((x+y)%128 === 0) ? '#556b2f' : '#3d4d27';
+          ctx3.fillRect(x+2, y+2, 60, 60);
+        }
+      }
+      ctx3.strokeStyle = '#2b2115'; ctx3.lineWidth = 4;
+      ctx3.beginPath(); ctx3.moveTo(0, 120); ctx3.lineTo(512, 380); ctx3.stroke();
+      document.getElementById('tex-terrain').src = c3.toDataURL();
+
+      // 4. Wood Grain
+      const c4 = document.createElement('canvas'); c4.width = 256; c4.height = 256;
+      const ctx4 = c4.getContext('2d');
+      ctx4.fillStyle = '#8b5a2b'; ctx4.fillRect(0,0,256,256);
+      ctx4.fillStyle = '#5c3a1e';
+      for(let i=0; i<25; i++) { ctx4.fillRect(0, i*10, 256, 4); }
+      document.getElementById('tex-wood').src = c4.toDataURL();
+    }
+    generateTextures();
+
+    /* =========================================================================
+       2. PROCEDURAL WEB AUDIO API SOUND SYNTHESIZER
+       ========================================================================= */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.engineOsc = null;
+        this.engineGain = null;
+      }
+
+      init() {
+        if (this.ctx) return;
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioCtx();
+        this.startEngineHum();
+      }
+
+      startEngineHum() {
+        if (!this.ctx) return;
+        this.engineOsc = this.ctx.createOscillator();
+        const filter = this.ctx.createBiquadFilter();
+        this.engineGain = this.ctx.createGain();
+
+        this.engineOsc.type = 'sawtooth';
+        this.engineOsc.frequency.setValueAtTime(75, this.ctx.currentTime); // Low engine pitch
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(280, this.ctx.currentTime);
+
+        this.engineGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+
+        this.engineOsc.connect(filter);
+        filter.connect(this.engineGain);
+        this.engineGain.connect(this.ctx.destination);
+        this.engineOsc.start();
+      }
+
+      playGunshot() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        
+        // Machine gun noise buffer pulse
+        const bufferSize = this.ctx.sampleRate * 0.04;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1200, t);
+        filter.Q.setValueAtTime(1.5, t);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.35, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.04);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start(t);
+
+        // Low pop impact punch
+        const pop = this.ctx.createOscillator();
+        const popGain = this.ctx.createGain();
+        pop.type = 'square';
+        pop.frequency.setValueAtTime(180, t);
+        pop.frequency.exponentialRampToValueAtTime(40, t + 0.035);
+        popGain.gain.setValueAtTime(0.3, t);
+        popGain.gain.exponentialRampToValueAtTime(0.01, t + 0.035);
+
+        pop.connect(popGain);
+        popGain.connect(this.ctx.destination);
+        pop.start(t);
+        pop.stop(t + 0.04);
+      }
+
+      playExplosion() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        
+        // Deep bass rumble
+        const osc = this.ctx.createOscillator();
+        const oscGain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(110, t);
+        osc.frequency.exponentialRampToValueAtTime(25, t + 0.8);
+
+        oscGain.gain.setValueAtTime(0.6, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.8);
+
+        osc.connect(oscGain);
+        oscGain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.8);
+
+        // Filtered explosion noise
+        const bufLen = this.ctx.sampleRate * 0.9;
+        const buffer = this.ctx.createBuffer(1, bufLen, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufLen; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(600, t);
+        filter.frequency.exponentialRampToValueAtTime(80, t + 0.9);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.8, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.9);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start(t);
+      }
+
+      playHit() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800, t);
+        osc.frequency.exponentialRampToValueAtTime(150, t + 0.08);
+
+        gain.gain.setValueAtTime(0.4, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.08);
+      }
+
+      playJamClick() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, t);
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.05);
+      }
+    }
+
+    const soundFx = new SoundEngine();
+
+    /* =========================================================================
+       3. GAME STATE & CONSTANTS
+       ========================================================================= */
+    const GAME = {
+      active: false,
+      score: 0,
+      kills: 0,
+      shotsFired: 0,
+      shotsHit: 0,
+      combo: 1,
+      comboTimer: 0,
+      timeLeft: 60,
+      gunHeat: 0, // 0 to 100
+      isJammed: false,
+      lastFireTime: 0,
+      fireRateMs: 85, // ~12 rounds per second
+      keys: { w: false, a: false, s: false, d: false, space: false, mouse: false }
+    };
+
+    /* =========================================================================
+       4. SOPWITH CAMEL BUILDER & TARGET MANAGER
+       ========================================================================= */
+    function buildSopwithCamelEntity(id) {
+      const parent = document.createElement('a-entity');
+      parent.setAttribute('id', id);
+
+      // Wrapper group for model geometry
+      const plane = document.createElement('a-entity');
+      plane.setAttribute('class', 'camel-model');
+
+      // Fuselage (Olive Drab)
+      const body = document.createElement('a-box');
+      body.setAttribute('color', '#4b5320');
+      body.setAttribute('width', '0.65');
+      body.setAttribute('height', '0.65');
+      body.setAttribute('depth', '2.6');
+      plane.appendChild(body);
+
+      // Engine Cowling (Metallic dark)
+      const cowl = document.createElement('a-cylinder');
+      cowl.setAttribute('color', '#262626');
+      cowl.setAttribute('radius', '0.38');
+      cowl.setAttribute('height', '0.45');
+      cowl.setAttribute('rotation', '90 0 0');
+      cowl.setAttribute('position', '0 0 -1.3');
+      plane.appendChild(cowl);
+
+      // Spinning Propeller
+      const prop = document.createElement('a-entity');
+      prop.setAttribute('class', 'camel-prop');
+      prop.setAttribute('position', '0 0 -1.55');
+      const blade = document.createElement('a-box');
+      blade.setAttribute('src', '#tex-wood');
+      blade.setAttribute('width', '1.3');
+      blade.setAttribute('height', '0.1');
+      blade.setAttribute('depth', '0.02');
+      prop.appendChild(blade);
+      plane.appendChild(prop);
+
+      // Upper Wing
+      const topWing = document.createElement('a-box');
+      topWing.setAttribute('color', '#4b5320');
+      topWing.setAttribute('width', '4.8');
+      topWing.setAttribute('height', '0.05');
+      topWing.setAttribute('depth', '0.8');
+      topWing.setAttribute('position', '0 0.65 -0.1');
+      plane.appendChild(topWing);
+
+      // Lower Wing
+      const botWing = document.createElement('a-box');
+      botWing.setAttribute('color', '#4b5320');
+      botWing.setAttribute('width', '4.4');
+      botWing.setAttribute('height', '0.05');
+      botWing.setAttribute('depth', '0.7');
+      botWing.setAttribute('position', '0 -0.25 -0.1');
+      plane.appendChild(botWing);
+
+      // RAF Roundels on Upper Wing
+      const roundelL = document.createElement('a-plane');
+      roundelL.setAttribute('src', '#tex-rafroundel');
+      roundelL.setAttribute('width', '0.55');
+      roundelL.setAttribute('height', '0.55');
+      roundelL.setAttribute('position', '-1.8 0.68 -0.1');
+      roundelL.setAttribute('rotation', '-90 0 0');
+      plane.appendChild(roundelL);
+
+      const roundelR = document.createElement('a-plane');
+      roundelR.setAttribute('src', '#tex-rafroundel');
+      roundelR.setAttribute('width', '0.55');
+      roundelR.setAttribute('height', '0.55');
+      roundelR.setAttribute('position', '1.8 0.68 -0.1');
+      roundelR.setAttribute('rotation', '-90 0 0');
+      plane.appendChild(roundelR);
+
+      // Struts
+      const strutL = document.createElement('a-cylinder');
+      strutL.setAttribute('color', '#1a1a1a');
+      strutL.setAttribute('radius', '0.015');
+      strutL.setAttribute('height', '0.9');
+      strutL.setAttribute('position', '-1.6 0.2 -0.1');
+      plane.appendChild(strutL);
+
+      const strutR = document.createElement('a-cylinder');
+      strutR.setAttribute('color', '#1a1a1a');
+      strutR.setAttribute('radius', '0.015');
+      strutR.setAttribute('height', '0.9');
+      strutR.setAttribute('position', '1.8 0.2 -0.1');
+      plane.appendChild(strutR);
+
+      // Tail Fin
+      const tail = document.createElement('a-box');
+      tail.setAttribute('color', '#4b5320');
+      tail.setAttribute('width', '0.04');
+      tail.setAttribute('height', '0.6');
+      tail.setAttribute('depth', '0.55');
+      tail.setAttribute('position', '0 0.35 1.1');
+      plane.appendChild(tail);
+
+      // Bounding sphere Invisible Hitbox for raycasting
+      const hitbox = document.createElement('a-sphere');
+      hitbox.setAttribute('class', 'target-hitbox');
+      hitbox.setAttribute('radius', '1.8');
+      hitbox.setAttribute('visible', 'false');
+      plane.appendChild(hitbox);
+
+      parent.appendChild(plane);
+      return parent;
+    }
+
+    class TargetManager {
+      constructor() {
+        this.container = document.getElementById('targets-container');
+        this.targets = [];
+        this.maxTargets = 7;
+      }
+
+      spawnAll() {
+        this.clear();
+        for (let i = 0; i < this.maxTargets; i++) {
+          this.spawnSingle(i);
+        }
+      }
+
+      spawnSingle(index) {
+        const id = `camel-target-${index}-${Date.now()}`;
+        const el = buildSopwithCamelEntity(id);
+        this.container.appendChild(el);
+
+        // Random path trajectory parameters
+        const targetObj = {
+          id: id,
+          el: el,
+          center: {
+            x: (Math.random() - 0.5) * 120,
+            y: 15 + Math.random() * 30,
+            z: (Math.random() - 0.5) * 120
+          },
+          radiusX: 35 + Math.random() * 45,
+          radiusZ: 35 + Math.random() * 45,
+          speed: 0.3 + Math.random() * 0.4,
+          phase: Math.random() * Math.PI * 2,
+          vertFreq: 1 + Math.random() * 2,
+          vertAmp: 5 + Math.random() * 10,
+          evasionTime: 0,
+          pos: new THREE.Vector3()
+        };
+
+        this.targets.push(targetObj);
+      }
+
+      clear() {
+        this.container.innerHTML = '';
+        this.targets = [];
+      }
+
+      update(dt) {
+        const time = performance.now() * 0.001;
+
+        this.targets.forEach(t => {
+          if (!t.el || !t.el.parentNode) return;
+
+          // Propeller rotation
+          const prop = t.el.querySelector('.camel-prop');
+          if (prop) {
+            const currentRot = prop.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
+            prop.setAttribute('rotation', `0 0 ${currentRot.z + 45}`);
+          }
+
+          // Calculate trajectory position
+          t.phase += t.speed * dt;
+          let angle = t.phase;
+
+          let x = t.center.x + Math.sin(angle) * t.radiusX;
+          let z = t.center.z + Math.cos(angle) * t.radiusZ;
+          let y = t.center.y + Math.sin(angle * t.vertFreq) * t.vertAmp;
+
+          // Evasive Roll Maneuver
+          let roll = 0;
+          if (t.evasionTime > 0) {
+            t.evasionTime -= dt;
+            roll = Math.sin(t.evasionTime * 12) * 45;
+            y += Math.sin(t.evasionTime * 10) * 8;
+          }
+
+          // Velocity vector for heading direction
+          const nextAngle = angle + 0.05;
+          const nextX = t.center.x + Math.sin(nextAngle) * t.radiusX;
+          const nextZ = t.center.z + Math.cos(nextAngle) * t.radiusZ;
+          const nextY = t.center.y + Math.sin(nextAngle * t.vertFreq) * t.vertAmp;
+
+          const dx = nextX - x;
+          const dy = nextY - y;
+          const dz = nextZ - z;
+
+          const headingYaw = Math.atan2(dx, dz) * (180 / Math.PI) + 180;
+          const bankRoll = Math.sin(angle) * -25 + roll;
+
+          t.pos.set(x, y, z);
+          t.el.setAttribute('position', `${x} ${y} ${z}`);
+          t.el.setAttribute('rotation', `0 ${headingYaw} ${bankRoll}`);
+        });
+      }
+
+      triggerEvasionNear(hitPoint) {
+        this.targets.forEach(t => {
+          if (t.pos.distanceTo(hitPoint) < 25) {
+            t.evasionTime = 1.8;
+          }
+        });
+      }
+
+      destroyTarget(targetObj) {
+        // Remove from DOM & array
+        if (targetObj.el && targetObj.el.parentNode) {
+          targetObj.el.parentNode.removeChild(targetObj.el);
+        }
+        this.targets = this.targets.filter(t => t.id !== targetObj.id);
+
+        // Respawn new target after brief delay
+        setTimeout(() => {
+          if (GAME.active) {
+            this.spawnSingle(Math.floor(Math.random() * 1000));
+          }
+        }, 1200);
+      }
+    }
+
+    const targetMgr = new TargetManager();
+
+    /* =========================================================================
+       5. CLOUD GENERATOR
+       ========================================================================= */
+    function spawnClouds() {
+      const group = document.getElementById('cloud-group');
+      group.innerHTML = '';
+      for (let i = 0; i < 18; i++) {
+        const cloud = document.createElement('a-entity');
+        const x = (Math.random() - 0.5) * 600;
+        const y = 40 + Math.random() * 50;
+        const z = (Math.random() - 0.5) * 600;
+        cloud.setAttribute('position', `${x} ${y} ${z}`);
+
+        // Cluster of cloud puffs
+        for (let j = 0; j < 5; j++) {
+          const puff = document.createElement('a-dodecahedron');
+          puff.setAttribute('color', '#ffffff');
+          puff.setAttribute('radius', `${8 + Math.random() * 12}`);
+          puff.setAttribute('position', `${(Math.random() - 0.5) * 15} ${(Math.random() - 0.5) * 6} ${(Math.random() - 0.5) * 15}`);
+          puff.setAttribute('material', 'opacity: 0.75; transparent: true; flatShading: true');
+          cloud.appendChild(puff);
+        }
+        group.appendChild(cloud);
+      }
+    }
+    spawnClouds();
+
+    /* =========================================================================
+       6. COMBAT, RAYCASTING & PARTICLE FX
+       ========================================================================= */
+    const fxContainer = document.getElementById('fx-container');
+
+    function fireSpandauGuns() {
+      if (!GAME.active || GAME.isJammed) return;
+
+      const now = performance.now();
+      if (now - GAME.lastFireTime < GAME.fireRateMs) return;
+      GAME.lastFireTime = now;
+
+      // Increase Heat
+      GAME.gunHeat = Math.min(100, GAME.gunHeat + 2.2);
+      if (GAME.gunHeat >= 100) {
+        GAME.isJammed = true;
+        soundFx.playJamClick();
+        updateHeatUI();
+      }
+
+      GAME.shotsFired++;
+      soundFx.playGunshot();
+
+      // Trigger Muzzle Flashes
+      const fLeft = document.getElementById('flash-left');
+      const fRight = document.getElementById('flash-right');
+      fLeft.setAttribute('visible', 'true');
+      fRight.setAttribute('visible', 'true');
+      setTimeout(() => {
+        fLeft.setAttribute('visible', 'false');
+        fRight.setAttribute('visible', 'false');
+      }, 35);
+
+      // Gun Recoil Animation
+      const gunL = document.getElementById('gun-left');
+      const gunR = document.getElementById('gun-right');
+      gunL.setAttribute('position', '-0.13 0.14 -0.11');
+      gunR.setAttribute('position', '0.13 0.14 -0.11');
+      setTimeout(() => {
+        gunL.setAttribute('position', '-0.13 0.14 -0.15');
+        gunR.setAttribute('position', '0.13 0.14 -0.15');
+      }, 40);
+
+      // Perform Raycast from Camera Forward
+      const cameraEl = document.getElementById('main-cam');
+      const cameraThree = cameraEl.getObject3D('camera');
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera({ x: 0, y: 0 }, cameraThree);
+
+      // Get forward vector for tracer visual
+      const camWorldPos = new THREE.Vector3();
+      cameraEl.object3D.getWorldPosition(camWorldPos);
+      const camWorldDir = new THREE.Vector3();
+      cameraEl.object3D.getWorldDirection(camWorldDir).negate();
+
+      // Spawn Tracer Beam
+      spawnTracer(camWorldPos, camWorldDir);
+
+      // Hit test against Target Camels
+      let hitFound = false;
+      let closestDist = Infinity;
+      let hitTarget = null;
+      let hitPoint = new THREE.Vector3();
+
+      targetMgr.targets.forEach(t => {
+        const sphere = new THREE.Sphere(t.pos, 2.2);
+        const intersectPoint = new THREE.Vector3();
+        if (raycaster.ray.intersectSphere(sphere, intersectPoint)) {
+          const dist = camWorldPos.distanceTo(intersectPoint);
+          if (dist < closestDist) {
+            closestDist = dist;
+            hitTarget = t;
+            hitPoint.copy(intersectPoint);
+            hitFound = true;
+          }
+        }
+      });
+
+      if (hitFound && hitTarget) {
+        GAME.shotsHit++;
+        soundFx.playHit();
+        spawnHitSparks(hitPoint);
+
+        // Destroy Target
+        createExplosionFX(hitPoint);
+        spawnFloatingText(hitPoint, `+${100 * GAME.combo} PTS`);
+        targetMgr.destroyTarget(hitTarget);
+
+        // Update Combo & Score
+        GAME.score += 100 * GAME.combo;
+        GAME.kills++;
+        GAME.combo++;
+        GAME.comboTimer = 3.5; // Reset combo decay timer
+        triggerComboUI();
+      } else {
+        // Trigger evasion near miss vector
+        const missPoint = camWorldPos.clone().add(camWorldDir.clone().multiplyScalar(60));
+        targetMgr.triggerEvasionNear(missPoint);
+      }
+
+      updateHUD();
+    }
+
+    function spawnTracer(startPos, dir) {
+      const tracer = document.createElement('a-cylinder');
+      tracer.setAttribute('color', '#ffcc00');
+      tracer.setAttribute('radius', '0.04');
+      tracer.setAttribute('height', '12');
+      tracer.setAttribute('material', 'emissive: #ff9900; emissiveIntensity: 4; transparent: true; opacity: 0.95');
+
+      const endPos = startPos.clone().add(dir.clone().multiplyScalar(30));
+      tracer.setAttribute('position', `${endPos.x} ${endPos.y} ${endPos.z}`);
+
+      // Align cylinder with travel direction
+      const rot = new THREE.Euler().setFromQuaternion(
+        new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+      );
+      tracer.setAttribute('rotation', `${rot.x * 180/Math.PI} ${rot.y * 180/Math.PI} ${rot.z * 180/Math.PI}`);
+
+      fxContainer.appendChild(tracer);
+      setTimeout(() => {
+        if (tracer.parentNode) tracer.parentNode.removeChild(tracer);
+      }, 100);
+    }
+
+    function spawnHitSparks(pos) {
+      for (let i = 0; i < 6; i++) {
+        const spark = document.createElement('a-sphere');
+        spark.setAttribute('color', '#ffee55');
+        spark.setAttribute('radius', '0.15');
+        spark.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
+        spark.setAttribute('material', 'emissive: #ffbb00; emissiveIntensity: 3');
+        fxContainer.appendChild(spark);
+        setTimeout(() => { if (spark.parentNode) spark.parentNode.removeChild(spark); }, 120);
+      }
+    }
+
+    function createExplosionFX(pos) {
+      soundFx.playExplosion();
+
+      // Fireball expanding spheres
+      for (let i = 0; i < 8; i++) {
+        const fb = document.createElement('a-sphere');
+        const color = (i % 2 === 0) ? '#ff4500' : '#ffa500';
+        fb.setAttribute('color', color);
+        fb.setAttribute('radius', '0.5');
+        fb.setAttribute('position', `${pos.x + (Math.random()-0.5)*2} ${pos.y + (Math.random()-0.5)*2} ${pos.z + (Math.random()-0.5)*2}`);
+        fb.setAttribute('material', 'emissive: #ff2200; emissiveIntensity: 2; transparent: true; opacity: 0.9');
+        fxContainer.appendChild(fb);
+
+        // Animate scale explosion
+        let scale = 1;
+        let opacity = 0.9;
+        const interval = setInterval(() => {
+          scale += 0.35;
+          opacity -= 0.08;
+          fb.setAttribute('scale', `${scale} ${scale} ${scale}`);
+          fb.setAttribute('material', `opacity: ${Math.max(0, opacity)}`);
+          if (opacity <= 0) {
+            clearInterval(interval);
+            if (fb.parentNode) fb.parentNode.removeChild(fb);
+          }
+        }, 30);
+      }
+
+      // Falling Wing/Debris Chunks
+      for (let k = 0; k < 4; k++) {
+        const debris = document.createElement('a-box');
+        debris.setAttribute('color', '#4b5320');
+        debris.setAttribute('width', '1.2');
+        debris.setAttribute('height', '0.1');
+        debris.setAttribute('depth', '0.6');
+        debris.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
+        fxContainer.appendChild(debris);
+
+        let dPos = pos.clone();
+        let vel = new THREE.Vector3((Math.random()-0.5)*15, (Math.random()*10)+2, (Math.random()-0.5)*15);
+        let rotX = 0, rotY = 0;
+
+        const dInt = setInterval(() => {
+          vel.y -= 0.6; // Gravity
+          dPos.addScaledVector(vel, 0.05);
+          rotX += 12; rotY += 8;
+          debris.setAttribute('position', `${dPos.x} ${dPos.y} ${dPos.z}`);
+          debris.setAttribute('rotation', `${rotX} ${rotY} 0`);
+          if (dPos.y <= 0) {
+            clearInterval(dInt);
+            if (debris.parentNode) debris.parentNode.removeChild(debris);
+          }
+        }, 30);
+      }
+    }
+
+    function spawnFloatingText(pos, textStr) {
+      const textEl = document.createElement('a-text');
+      textEl.setAttribute('value', textStr);
+      textEl.setAttribute('align', 'center');
+      textEl.setAttribute('color', '#FFD700');
+      textEl.setAttribute('scale', '3.5 3.5 3.5');
+      textEl.setAttribute('position', `${pos.x} ${pos.y + 1.5} ${pos.z}`);
+      textEl.setAttribute('side', 'double');
+      fxContainer.appendChild(textEl);
+
+      let curY = pos.y + 1.5;
+      let opacity = 1.0;
+      const tInt = setInterval(() => {
+        curY += 0.15;
+        opacity -= 0.04;
+        textEl.setAttribute('position', `${pos.x} ${curY} ${pos.z}`);
+        textEl.setAttribute('opacity', `${Math.max(0, opacity)}`);
+        if (opacity <= 0) {
+          clearInterval(tInt);
+          if (textEl.parentNode) textEl.parentNode.removeChild(textEl);
+        }
+      }, 30);
+    }
+
+    /* =========================================================================
+       7. UI, INPUT HANDLERS & MAIN GAME LOOP
+       ========================================================================= */
+    const hudScore = document.getElementById('hud-score');
+    const hudCombo = document.getElementById('hud-combo');
+    const hudTimer = document.getElementById('hud-timer');
+    const hudKills = document.getElementById('hud-kills');
+    const hudAccuracy = document.getElementById('hud-accuracy');
+    const heatFill = document.getElementById('heat-fill');
+    const heatStatus = document.getElementById('heat-status');
+
+    function updateHUD() {
+      hudScore.innerText = String(GAME.score).padStart(6, '0');
+      hudKills.innerText = GAME.kills;
+      
+      const acc = GAME.shotsFired > 0 ? Math.round((GAME.shotsHit / GAME.shotsFired) * 100) : 100;
+      hudAccuracy.innerText = `${acc}%`;
+
+      hudCombo.innerText = `x${GAME.combo}`;
+    }
+
+    function triggerComboUI() {
+      hudCombo.classList.remove('combo-bounce');
+      void hudCombo.offsetWidth;
+      hudCombo.classList.add('combo-bounce');
+    }
+
+    function updateHeatUI() {
+      heatFill.style.width = `${GAME.gunHeat}%`;
+      if (GAME.isJammed) {
+        heatStatus.innerText = 'JAMMED! COOLING';
+        heatStatus.className = 'font-bold text-red-500 animate-pulse';
+        heatFill.classList.add('heat-bar-overheat');
+      } else if (GAME.gunHeat > 70) {
+        heatStatus.innerText = 'CAUTION';
+        heatStatus.className = 'font-bold text-yellow-400';
+        heatFill.classList.remove('heat-bar-overheat');
+      } else {
+        heatStatus.innerText = 'READY';
+        heatStatus.className = 'font-bold text-green-400';
+        heatFill.classList.remove('heat-bar-overheat');
+      }
+    }
+
+    // Input Listeners
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') GAME.keys.w = true;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') GAME.keys.s = true;
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') GAME.keys.a = true;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') GAME.keys.d = true;
+      if (e.code === 'Space') { GAME.keys.space = true; e.preventDefault(); }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') GAME.keys.w = false;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') GAME.keys.s = false;
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') GAME.keys.a = false;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') GAME.keys.d = false;
+      if (e.code === 'Space') GAME.keys.space = false;
+    });
+
+    window.addEventListener('mousedown', (e) => {
+      if (e.button === 0 && GAME.active) { GAME.keys.mouse = true; }
+    });
+    window.addEventListener('mouseup', () => { GAME.keys.mouse = false; });
+
+    // Touch support for Mobile
+    const mobileBtn = document.getElementById('mobile-fire-btn');
+    if ('ontouchstart' in window) { mobileBtn.classList.remove('hidden'); }
+    mobileBtn.addEventListener('touchstart', (e) => { GAME.keys.space = true; e.preventDefault(); });
+    mobileBtn.addEventListener('touchend', () => { GAME.keys.space = false; });
+
+    // Start / Restart Buttons
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+
+    function startGame() {
+      soundFx.init();
+      GAME.active = true;
+      GAME.score = 0;
+      GAME.kills = 0;
+      GAME.shotsFired = 0;
+      GAME.shotsHit = 0;
+      GAME.combo = 1;
+      GAME.comboTimer = 0;
+      GAME.timeLeft = 60;
+      GAME.gunHeat = 0;
+      GAME.isJammed = false;
+
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('gameover-screen').classList.add('hidden');
+      document.getElementById('game-hud').classList.remove('hidden');
+      document.getElementById('heat-hud').classList.remove('hidden');
+
+      targetMgr.spawnAll();
+      updateHUD();
+      updateHeatUI();
+    }
+
+    function endGame() {
+      GAME.active = false;
+      document.getElementById('game-hud').classList.add('hidden');
+      document.getElementById('heat-hud').classList.add('hidden');
+      document.getElementById('gameover-screen').classList.remove('hidden');
+
+      const acc = GAME.shotsFired > 0 ? Math.round((GAME.shotsHit / GAME.shotsFired) * 100) : 0;
+      document.getElementById('final-score').innerText = GAME.score;
+      document.getElementById('final-kills').innerText = GAME.kills;
+      document.getElementById('final-shots').innerText = GAME.shotsFired;
+      document.getElementById('final-accuracy').innerText = `${acc}%`;
+
+      // Calculate Pilot Rank Title
+      let rank = "NIEUPORT NOVICE";
+      if (GAME.score >= 5000) rank = "RED BARON SUPREME ACE";
+      else if (GAME.score >= 3200) rank = "WING COMMANDER";
+      else if (GAME.score >= 1800) rank = "SOPWITH HUNTER";
+      else if (GAME.score >= 800) rank = "FRONTLINE AVIATOR";
+
+      document.getElementById('rank-badge').innerText = `RANK: ${rank}`;
+    }
+
+    // Timer Interval (1 second)
+    setInterval(() => {
+      if (!GAME.active) return;
+      GAME.timeLeft--;
+      const mins = Math.floor(GAME.timeLeft / 60);
+      const secs = GAME.timeLeft % 60;
+      hudTimer.innerText = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+
+      if (GAME.timeLeft <= 0) {
+        endGame();
+      }
+    }, 1000);
+
+    /* =========================================================================
+       8. MAIN TICK LOOP
+       ========================================================================= */
+    let lastFrameTime = performance.now();
+
+    function gameLoop() {
+      requestAnimationFrame(gameLoop);
+
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - lastFrameTime) * 0.001);
+      lastFrameTime = now;
+
+      // Animate Player Propeller
+      const prop = document.getElementById('player-propeller');
+      if (prop) {
+        const curRot = prop.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
+        prop.setAttribute('rotation', `0 0 ${curRot.z + 55}`);
+      }
+
+      if (!GAME.active) return;
+
+      // Update Targets Flight Paths
+      targetMgr.update(dt);
+
+      // Gun Firing Input Check
+      if (GAME.keys.space || GAME.keys.mouse) {
+        fireSpandauGuns();
+      }
+
+      // Gun Heat Dissipation / Cooling
+      if (!GAME.keys.space && !GAME.keys.mouse) {
+        if (GAME.gunHeat > 0) {
+          GAME.gunHeat = Math.max(0, GAME.gunHeat - dt * 32);
+          if (GAME.gunHeat === 0 && GAME.isJammed) {
+            GAME.isJammed = false;
+          }
+          updateHeatUI();
+        }
+      }
+
+      // Combo Decay
+      if (GAME.combo > 1) {
+        GAME.comboTimer -= dt;
+        if (GAME.comboTimer <= 0) {
+          GAME.combo = 1;
+          updateHUD();
+        }
+      }
+
+      // WASD Subtle Flight Rig Steering / Tilt Dynamics
+      const rig = document.getElementById('player-rig');
+      const cockpit = document.getElementById('cockpit');
+      if (rig && cockpit) {
+        const rigPos = rig.getAttribute('position');
+        let dx = 0, dy = 0;
+        let roll = 0, pitch = 0;
+
+        if (GAME.keys.a) { dx -= 12 * dt; roll = 12; }
+        if (GAME.keys.d) { dx += 12 * dt; roll = -12; }
+        if (GAME.keys.w) { dy += 8 * dt; pitch = -8; }
+        if (GAME.keys.s) { dy -= 8 * dt; pitch = 8; }
+
+        // Bound movement in arena
+        const newX = Math.max(-80, Math.min(80, rigPos.x + dx));
+        const newY = Math.max(10, Math.min(60, rigPos.y + dy));
+
+        rig.setAttribute('position', `${newX} ${newY} ${rigPos.z}`);
+        cockpit.setAttribute('rotation', `${pitch} 0 ${roll}`);
+      }
+    }
+
+    // Start loop on load
+    window.onload = () => {
+      gameLoop();
+    };
+  </script>
+</body>
+</html>
